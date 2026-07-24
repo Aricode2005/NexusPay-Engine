@@ -1,0 +1,365 @@
+{
+  "openapi": "3.0.0",
+  "info": {
+    "title": "Enterprise FinTech Wallet API",
+    "version": "5.0.0",
+    "description": "A decoupled core banking API featuring identity management, dynamic bank routing, immutable audit logs, and ACID transactions with Kafka."
+  },
+  "servers": [
+    {
+      "url": "http://localhost:3000/api/v1",
+      "description": "Local Development Server"
+    }
+  ],
+  "components": {
+    "securitySchemes": {
+      "bearerAuth": {
+        "type": "http",
+        "scheme": "bearer",
+        "bearerFormat": "JWT"
+      }
+    }
+  },
+  "paths": {
+    "/auth/register": {
+      "post": {
+        "summary": "Phase 1: Register Identity",
+        "description": "Creates the base human identity.",
+        "tags": [
+          "1. Onboarding"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "fullName": {
+                    "type": "string",
+                    "example": "Aritra Developer"
+                  },
+                  "email": {
+                    "type": "string",
+                    "example": "aritra@example.com"
+                  },
+                  "phone": {
+                    "type": "string",
+                    "example": "+919876543210"
+                  },
+                  "password": {
+                    "type": "string",
+                    "example": "SecurePass123!"
+                  },
+                  "aadharNumber": {
+                    "type": "string",
+                    "example": "[Aadhaar Redacted]"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Identity created"
+          }
+        }
+      }
+    },
+    "/auth/login": {
+      "post": {
+        "summary": "Phase 1: Authenticate User",
+        "tags": [
+          "1. Onboarding"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "email": {
+                    "type": "string",
+                    "example": "aritra@example.com"
+                  },
+                  "password": {
+                    "type": "string",
+                    "example": "SecurePass123!"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Returns JWT Token"
+          },
+          "429": {
+            "description": "Too Many Requests..."
+          }
+        }
+      }
+    },
+    "/handles": {
+      "get": {
+        "summary": "Phase 2: View All Handles",
+        "description": "Returns all bank accounts linked to the authenticated user.",
+        "tags": [
+          "2. Handle Management"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Returns array of handles"
+          }
+        }
+      },
+      "post": {
+        "summary": "Phase 2: Link Bank & Create Handle",
+        "description": "Links a real bank account to the user and assigns a routing handle.",
+        "tags": [
+          "2. Handle Management"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "handle": {
+                    "type": "string",
+                    "example": "aritra@hdfc"
+                  },
+                  "bankName": {
+                    "type": "string",
+                    "example": "HDFC Bank"
+                  },
+                  "accountNumber": {
+                    "type": "string",
+                    "example": "0000123456789"
+                  },
+                  "ifscCode": {
+                    "type": "string",
+                    "example": "HDFC0001234"
+                  },
+                  "branch": {
+                    "type": "string",
+                    "example": "Kolkata Main"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Handle linked"
+          },
+          "400": {
+            "description": "Bank not supported or handle taken"
+          }
+        }
+      }
+    },
+    "/handles/set-primary": {
+      "put": {
+        "summary": "Phase 2: Change Primary Handle",
+        "description": "Changes the default receiving bank account for UPI transfers.",
+        "tags": [
+          "2. Handle Management"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "handleId": {
+                    "type": "string",
+                    "example": "paste-the-uuid-here"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Primary handle updated successfully"
+          },
+          "404": {
+            "description": "Handle not found"
+          }
+        }
+      }
+    },
+    "/transactions/history": {
+      "get": {
+        "summary": "Phase 3: View Transaction History",
+        "description": "Returns an immutable audit log of all credits and debits for the authenticated user.",
+        "tags": [
+          "3. Transactions"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Returns transaction history array"
+          }
+        }
+      }
+    },
+    "/transactions/intent": {
+      "post": {
+        "summary": "Step 1: Create a Transfer Intent",
+        "description": "Initiates a transfer and generates an idempotency key (order_id) without moving money.",
+        "tags": [
+          "Transactions"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "transferMethod",
+                  "userHandle",
+                  "amount"
+                ],
+                "properties": {
+                  "transferMethod": {
+                   "type": "string",
+                   "enum": ["HANDLE", "BANK_ACCOUNT"],
+                   "example": "HANDLE",
+                   "description": "Select how you want to identify the receiver"
+                  },
+                  "userHandle": {
+                    "type": "string",
+                    "example": "rahul@hdfc",
+                    "description": "Sender's handle"
+                  },
+                  "receiverHandle": {
+                    "type": "string",
+                    "example": "priya@sbi",
+                    "description": "Required if transferMethod is HANDLE"
+                  },
+                  "bankName": {
+                    "type": "string",
+                    "example": "State Bank of India",
+                    "description": "Required if transferMethod is BANK_ACCOUNT"
+                  },
+                  "accountNumber": {
+                    "type": "string",
+                    "example": "0987654321",
+                    "description": "Required if transferMethod is BANK_ACCOUNT"
+                  },
+                  "amount": {
+                    "type": "number",
+                    "example": 500
+                  },
+                  "remarks": {
+                    "type": "string",
+                    "example": "Pizza money"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Intent created successfully, returns order_id."
+          },
+          "400": {
+            "description": "Invalid input or missing fields."
+          },
+          "404": {
+            "description": "Sender or Receiver account not found."
+          }
+        }
+      }
+    },
+    "/transactions/execute": {
+      "post": {
+        "summary": "Step 2: Execute Transfer via MPIN",
+        "description": "Executes the pending intent using the order_id and authenticates via the user's MPIN. Protected by idempotency locks.",
+        "tags": [
+          "Transactions"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "order_id",
+                  "mpin"
+                ],
+                "properties": {
+                  "order_id": {
+                    "type": "string",
+                    "example": "ORD_f47ac10b-58cc-4372-a567-0e02b2c3d479",
+                    "description": "The ID returned from the /intent endpoint"
+                  },
+                  "mpin": {
+                    "type": "string",
+                    "example": "1234",
+                    "description": "The user's secret 4-digit PIN"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Transfer successful or successfully caught duplicate."
+          },
+          "400": {
+            "description": "Insufficient funds or previously failed order."
+          },
+          "401": {
+            "description": "Invalid MPIN."
+          },
+          "404": {
+            "description": "Order ID not found."
+          }
+        }
+      }
+    }
+  }
+}
