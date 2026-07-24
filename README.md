@@ -24,12 +24,13 @@ A high-performance, event-driven backend for a FinTech wallet application. This 
 
 ---
 
-## 💻 How to Run Locally
 
-Because this project relies on specific database engines and message brokers, please ensure you have **PostgreSQL**, **Redis**, and **Apache Kafka** running on your local machine before starting.
+## 💻 Local Setup & Installation
 
-### 1. Clone the repository
+To run NexusPay Engine locally, you will need Node.js, PostgreSQL, Redis, and Apache Kafka installed on your machine (or running via Docker).
+
+### 1. Clone the Repository
 ```bash
-git clone [https://github.com/YOUR_USERNAME/fintech-wallet-backend.git](https://github.com/YOUR_USERNAME/fintech-wallet-backend.git)
-cd fintech-wallet-backend
+git clone [https://github.com/YOUR_USERNAME/nexuspay-engine.git](https://github.com/YOUR_USERNAME/nexuspay-engine.git)
+cd nexuspay-engine
 npm install
