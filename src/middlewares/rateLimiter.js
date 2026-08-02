@@ -1,10 +1,7 @@
 import rateLimit from 'express-rate-limit';
 import { RedisStore } from 'rate-limit-redis';
-import { createClient } from 'redis';
 
-const redisClient = createClient({ url: 'redis://localhost:6379' });
-redisClient.connect().catch(console.error);
-
+import redisClient from '../config/redis.js';
 const createLimiter = (prefix, maxRequests) => {
     return rateLimit({
         windowMs: 15 * 60 * 1000, 
@@ -19,7 +16,6 @@ const createLimiter = (prefix, maxRequests) => {
             sendCommand: (...args) => redisClient.sendCommand(args),
             prefix: prefix,
         }),
-        
     });
 };
 

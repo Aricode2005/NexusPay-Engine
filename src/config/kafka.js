@@ -1,7 +1,7 @@
 import { Kafka, Partitioners } from 'kafkajs';
 export const kafka = new Kafka({
-    clientId: 'wallet-app',
-    brokers: ['localhost:9092'],
+    clientId: 'nexuspay-engine',
+    brokers: [process.env.KAFKA_BROKER || 'localhost:9092'],
     retry: {
         initialRetryTime: 1000, 
         retries: 8              
@@ -44,6 +44,7 @@ export const sendKafkaEvent = async (topic, eventMessage) => {
     try {
         await producer.send({
             topic: topic,
+            acks: -1,
             messages: [
                 { 
                     value: JSON.stringify(eventMessage) 

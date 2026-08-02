@@ -13,6 +13,6 @@ const router = express.Router();
 router.post('/intent', authenticateToken, transferLimiter, createTransferIntent);
 
 router.post('/execute', authenticateToken, transferLimiter, executeTransfer);
-router.get('/history', authenticateToken, getTransactionHistory);
+router.get('/history', authenticateToken,transferLimiter,getTransactionHistory);
 
 export default router;

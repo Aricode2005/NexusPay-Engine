@@ -3,6 +3,7 @@ import express from 'express';
 import pool from './src/config/db.js';
 import authRoutes from './src/routes/authRoutes.js'; 
 import transactionRoutes from './src/routes/transactionRoutes.js';
+import notificationRoutes from './src/routes/notificationRoutes.js';
 import { connectKafka, createTopic } from './src/config/kafka.js';
 import { connectRedis } from './src/config/redis.js';
 import handleRoutes from './src/routes/handleRoutes.js';
@@ -27,12 +28,13 @@ app.use(express.json());
 app.use('/api/v1/auth', authRoutes);
 app.use('/api/v1/handles', handleRoutes);
 app.use('/api/v1/transactions', transactionRoutes);
+app.use('/api/v1/notifications', notificationRoutes);
 
 app.get('/health', (req, res) => {
     res.status(200).json({ status: 'OK', message: 'Wallet Backend is running seamlessly.' });
 });
 await connectRedis();
-startSweeperJob();
+// startSweeperJob();
 app.listen(PORT, () => {
     console.log(`Server is running on http://localhost:${PORT}`);
 });

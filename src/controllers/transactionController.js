@@ -85,7 +85,6 @@ export const executeTransfer = async (req, res) => {
         if (userRes.rows.length === 0) return res.status(404).json({ error: 'User not found.' });
 
         const storedMpin = userRes.rows[0].mpin;
-        // NOTE: For production, replace this with bcrypt.compare(mpin, storedMpin)
         if (mpin!==storedMpin) {
             return res.status(401).json({ error: 'Invalid MPIN. Transaction authorization failed.' });
         }
@@ -109,8 +108,7 @@ export const executeTransfer = async (req, res) => {
             return res.status(400).json({ error: 'This order previously failed and cannot be retried.' });
         }
 
-        // 3. LOCK ACCOUNTS (Always lock smallest ID first to prevent deadlocks)
-        // We must query the bank_accounts table to get the actual account IDs based on user_ids
+        // 3. LOCK ACCOUNTS 
         const senderAccRes = await client.query('SELECT id, balance FROM bank_accounts WHERE user_id = $1 AND user_handle = $2', [transaction.sender_id, transaction.sender_handle]);
         const receiverAccRes = await client.query('SELECT id FROM bank_accounts WHERE user_id = $1 AND user_handle = $2', [transaction.receiver_id, transaction.receiver_handle]);
         
