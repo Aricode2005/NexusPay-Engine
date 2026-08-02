@@ -18,6 +18,76 @@ A high-performance, event-driven backend for a FinTech wallet application. This 
 * **Security:** JWT Authentication, bcrypt, Helmet.js
 
 ---
+## 📊 Database Schema (ER Diagram)
+
+The NexusPay Engine utilizes a highly normalized PostgreSQL relational database. The schema is designed to ensure ACID compliance, prevent double-spending via row-level locking, and maintain immutable transaction histories.
+
+```mermaid
+erDiagram
+    %% Relationships
+    USERS ||--o{ BANK_ACCOUNTS : "owns"
+    USERS ||--o{ NOTIFICATIONS : "receives"
+    USERS ||--o{ TRANSACTIONS : "sends (sender_id)"
+    USERS ||--o{ TRANSACTIONS : "receives (receiver_id)"
+    BANKS ||--o{ BANK_ACCOUNTS : "hosts"
+
+    %% Tables and Columns
+    USERS {
+        uuid id PK
+        varchar full_name
+        varchar email UK
+        varchar phone UK
+        varchar aadhar_number UK
+        varchar password_hash
+        varchar mpin
+        timestamp created_at
+    }
+
+    BANKS {
+        uuid id PK
+        varchar bank_name UK
+        boolean is_active
+    }
+
+    BANK_ACCOUNTS {
+        uuid id PK
+        uuid user_id FK
+        uuid bank_id FK
+        varchar bank_name FK
+        varchar user_handle UK
+        varchar account_number
+        varchar ifsc_code
+        varchar branch
+        numeric balance
+        boolean is_primary
+        timestamp created_at
+    }
+
+    NOTIFICATIONS {
+        serial id PK
+        uuid user_id FK
+        varchar type
+        varchar title
+        text message
+        boolean is_read
+        timestamp created_at
+    }
+
+    TRANSACTIONS {
+        uuid id PK
+        uuid sender_id FK
+        uuid receiver_id FK
+        varchar order_id UK
+        varchar sender_handle
+        varchar sender_bank_name
+        varchar sender_account_no
+        varchar receiver_handle
+        varchar receiver_bank_name
+        varchar receiver_account_no
+        numeric amount
+        varchar status
+        timestamp timestamp
+    }
 
 
 ## 💻 Local Setup & Installation
