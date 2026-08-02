@@ -88,7 +88,9 @@ erDiagram
         varchar status
         timestamp timestamp
     }
+```
 
+---
 
 ## 💻 Local Setup & Installation
 
@@ -99,3 +101,4 @@ To run NexusPay Engine locally, you will need Node.js, PostgreSQL, Redis, and Ap
 git clone [https://github.com/YOUR_USERNAME/nexuspay-engine.git](https://github.com/YOUR_USERNAME/nexuspay-engine.git)
 cd nexuspay-engine
 npm install
+```
