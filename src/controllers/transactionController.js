@@ -1,5 +1,5 @@
 import pool from '../config/db.js';
-import { sendKafkaEvent } from '../config/kafka.js';
+import { publishTransferEvent } from '../services/kafkaPublisher.js';
 import crypto from 'crypto';
 import bcrypt from 'bcryptjs';
 
@@ -108,7 +108,6 @@ export const executeTransfer = async (req, res) => {
             return res.status(400).json({ error: 'This order previously failed and cannot be retried.' });
         }
 
-        // 3. LOCK ACCOUNTS 
         const senderAccRes = await client.query('SELECT id, balance FROM bank_accounts WHERE user_id = $1 AND user_handle = $2', [transaction.sender_id, transaction.sender_handle]);
         const receiverAccRes = await client.query('SELECT id FROM bank_accounts WHERE user_id = $1 AND user_handle = $2', [transaction.receiver_id, transaction.receiver_handle]);
         
@@ -127,15 +126,12 @@ export const executeTransfer = async (req, res) => {
             return res.status(400).json({ error: 'Insufficient funds.' });
         }
 
-        // 5. MOVE MONEY
         await client.query('UPDATE bank_accounts SET balance = balance - $1 WHERE id = $2', [transaction.amount, sAccId]);
         await client.query('UPDATE bank_accounts SET balance = balance + $1 WHERE id = $2', [transaction.amount, rAccId]);
 
-        // 6. FINALIZE TRANSACTION
         const finalTxn = await client.query("UPDATE transactions SET status = 'SUCCESS' WHERE id = $1 RETURNING *", [transaction.id]);
         await client.query('COMMIT');
 
-        // 7. KAFKA NOTIFICATION
         const senderUserEmailRes = await client.query('SELECT email FROM users WHERE id = $1', [transaction.sender_id]);
         const receiverUserEmailRes = await client.query('SELECT email FROM users WHERE id = $1', [transaction.receiver_id]);
         
@@ -147,7 +143,7 @@ export const executeTransfer = async (req, res) => {
             timestamp: new Date().toISOString()
         };
 
-        await sendKafkaEvent('transfer-notifications', kafkaPayload);
+        await publishTransferEvent(kafkaPayload);
 
         res.status(200).json({
             message: 'Transfer successful via MPIN authorization.',
