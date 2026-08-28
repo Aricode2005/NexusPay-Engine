@@ -7,7 +7,7 @@ export const kafka = new Kafka({
         retries: 8              
     }
 });
-const producer = kafka.producer({ 
+export const producer = kafka.producer({ 
     createPartitioner: Partitioners.LegacyPartitioner 
 });
 

@@ -42,7 +42,7 @@ app.get('/health', (req, res) => {
 await connectRedis();
 initializeRAG().catch(err => console.error("RAG Init Error:", err));
 initializeFraudAgent().catch(err => console.error("Fraud Agent Init Error:", err));
-startSweeperJob();
+// startSweeperJob();
 app.listen(PORT, () => {
     console.log(`Server is running on http://localhost:${PORT}`);
 });
