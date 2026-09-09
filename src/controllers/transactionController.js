@@ -89,6 +89,19 @@ export const executeTransfer = async (req, res) => {
             return res.status(401).json({ error: 'Invalid MPIN. Transaction authorization failed.' });
         }
 
+        // Check if account is frozen by fraud agent
+        const frozenCheck = await client.query(
+            'SELECT account_frozen, frozen_reason FROM users WHERE id = $1', 
+            [senderUserId]
+        );
+        if (frozenCheck.rows[0]?.account_frozen) {
+            return res.status(403).json({ 
+                error: 'Your account has been temporarily frozen due to suspicious activity.',
+                reason: frozenCheck.rows[0].frozen_reason,
+                action: 'Please contact support to verify your identity and unfreeze your account.'
+            });
+        }
+
         await client.query('BEGIN');
 
         const txnRes = await client.query('SELECT * FROM transactions WHERE order_id = $1 FOR UPDATE', [order_id]);
@@ -200,3 +213,45 @@ export const getTransactionHistory = async (req, res) => {
         res.status(500).json({ error: "Failed to retrieve transaction history" });
     }
 };
+
+export const getFraudStatus = async (req, res) => {
+    try {
+        const userId = req.user.id;
+        
+        const userRes = await pool.query(
+            'SELECT account_frozen, frozen_at, frozen_reason FROM users WHERE id = $1',
+            [userId]
+        );
+        
+        const eventsRes = await pool.query(
+            `SELECT id, risk_level, action_taken, agent_reasoning, created_at, resolved
+             FROM fraud_events 
+             WHERE user_id = $1 
+             ORDER BY created_at DESC LIMIT 10`,
+            [userId]
+        );
+        
+        // Calculate a simple risk score based on recent events
+        const events = eventsRes.rows;
+        let riskScore = 0;
+        events.forEach(e => {
+            if (!e.resolved) {
+                if (e.risk_level === 'CRITICAL') riskScore += 40;
+                else if (e.risk_level === 'HIGH') riskScore += 25;
+                else if (e.risk_level === 'MEDIUM') riskScore += 10;
+            }
+        });
+        riskScore = Math.min(riskScore, 100);
+        
+        res.status(200).json({
+            accountFrozen: userRes.rows[0]?.account_frozen || false,
+            frozenAt: userRes.rows[0]?.frozen_at || null,
+            frozenReason: userRes.rows[0]?.frozen_reason || null,
+            riskScore,
+            recentEvents: events
+        });
+    } catch (error) {
+        console.error('Fraud Status Error:', error.message);
+        res.status(500).json({ error: 'Failed to retrieve fraud status.' });
+    }
+};

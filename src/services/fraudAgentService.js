@@ -4,12 +4,25 @@ import { createReactAgent } from '@langchain/langgraph/prebuilt';
 import { z } from 'zod';
 import pool from '../config/db.js';
 
+let _currentAnalysisContext = null;
+
 /**
  * Tool: Freeze a user's accounts due to suspected fraud.
  * Inserts an ACCOUNT_FROZEN notification so the system can block further transfers.
  */
 const freezeAccountTool = tool(
     async ({ userId, reason }) => {
+        await pool.query(
+            `UPDATE users SET account_frozen = true, frozen_at = NOW(), frozen_reason = $2 WHERE id = $1`,
+            [userId, reason]
+        );
+        
+        await pool.query(
+            `INSERT INTO fraud_events (user_id, transaction_id, risk_level, action_taken, agent_reasoning, context_snapshot)
+             VALUES ($1, $2, 'CRITICAL', 'ACCOUNT_FROZEN', $3, $4)`,
+            [userId, _currentAnalysisContext?.currentTx?.txId || null, reason, JSON.stringify(_currentAnalysisContext || {})]
+        );
+
         await pool.query(
             `INSERT INTO notifications (user_id, type, title, message)
              VALUES ($1, $2, $3, $4)`,
@@ -41,6 +54,12 @@ const freezeAccountTool = tool(
 const sendFraudAlertTool = tool(
     async ({ userId, alertMessage }) => {
         await pool.query(
+            `INSERT INTO fraud_events (user_id, transaction_id, risk_level, action_taken, agent_reasoning, context_snapshot)
+             VALUES ($1, $2, 'HIGH', 'ALERT_SENT', $3, $4)`,
+            [userId, _currentAnalysisContext?.currentTx?.txId || null, alertMessage, JSON.stringify(_currentAnalysisContext || {})]
+        );
+        
+        await pool.query(
             `INSERT INTO notifications (user_id, type, title, message)
              VALUES ($1, $2, $3, $4)`,
             [userId, 'FRAUD_ALERT', '🚨 Suspicious Activity Detected', alertMessage]
@@ -66,6 +85,12 @@ const sendFraudAlertTool = tool(
 const flagForReviewTool = tool(
     async ({ userId, analysis }) => {
         await pool.query(
+            `INSERT INTO fraud_events (user_id, transaction_id, risk_level, action_taken, agent_reasoning, context_snapshot)
+             VALUES ($1, $2, 'MEDIUM', 'FLAGGED_FOR_REVIEW', $3, $4)`,
+            [userId, _currentAnalysisContext?.currentTx?.txId || null, analysis, JSON.stringify(_currentAnalysisContext || {})]
+        );
+
+        await pool.query(
             `INSERT INTO notifications (user_id, type, title, message)
              VALUES ($1, $2, $3, $4)`,
             [
@@ -88,8 +113,6 @@ const flagForReviewTool = tool(
         }),
     }
 );
-
-
 
 /** @type {ReturnType<typeof createReactAgent> | null} */
 let fraudAgent = null;
@@ -118,8 +141,6 @@ export const initializeFraudAgent = async () => {
         console.error('[FRAUD AGENT] ❌ Initialization failed:', error.message);
     }
 };
-
-
 
 /**
  * Gather all contextual data the agent needs to reason about a transaction.
@@ -184,6 +205,7 @@ export const analyzeTransaction = async (senderId, amount, txId, senderHandle, r
 
     try {
         const ctx = await gatherFraudContext(senderId, amount, txId);
+        _currentAnalysisContext = ctx;
 
         console.log(`[FRAUD AGENT] 📡 Analyzing TxID: ${txId} | ₹${parseFloat(amount).toLocaleString('en-IN')} | ${senderHandle} → ${receiverHandle}`);
 

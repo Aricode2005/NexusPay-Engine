@@ -120,4 +120,22 @@ ALTER TABLE IF EXISTS public.transactions
     ON UPDATE NO ACTION
     ON DELETE NO ACTION;
 
-END;
+
+CREATE TABLE IF NOT EXISTS public.fraud_events (
+    id serial PRIMARY KEY,
+    user_id uuid REFERENCES users(id) ON DELETE CASCADE,
+    transaction_id uuid REFERENCES transactions(id),
+    risk_level varchar(20) NOT NULL,
+    action_taken varchar(50) NOT NULL,
+    agent_reasoning text,
+    context_snapshot jsonb,
+    resolved boolean DEFAULT false,
+    resolved_at timestamp,
+    created_at timestamp DEFAULT CURRENT_TIMESTAMP
+);
+
+ALTER TABLE IF EXISTS public.users ADD COLUMN IF NOT EXISTS account_frozen boolean DEFAULT false;
+ALTER TABLE IF EXISTS public.users ADD COLUMN IF NOT EXISTS frozen_at timestamp;
+ALTER TABLE IF EXISTS public.users ADD COLUMN IF NOT EXISTS frozen_reason text;
+
+END;
