@@ -5,7 +5,12 @@
   "type": "module",
   "scripts": {
     "dev": "nodemon app.js",
-    "start": "node app.js"
+    "start": "node app.js",
+    "test:concurrency": "jest --config tests/concurrency/jest.config.cjs --forceExit --runInBand --verbose",
+    "test:double-spend": "jest --config tests/concurrency/jest.config.cjs tests/concurrency/double-spend.test.cjs --forceExit --verbose",
+    "test:deadlock": "jest --config tests/concurrency/jest.config.cjs tests/concurrency/deadlock.test.cjs --forceExit --verbose",
+    "test:idempotency": "jest --config tests/concurrency/jest.config.cjs tests/concurrency/idempotency.test.cjs --forceExit --verbose",
+    "test:setup-db": "psql -U postgres -d wallet_db -f tests/concurrency/setup-test-db.sql"
   },
   "dependencies": {
     "@google/genai": "^2.17.1",
@@ -32,6 +37,7 @@
     "zod": "^4.4.3"
   },
   "devDependencies": {
+    "jest": "^29.7.0",
     "nodemon": "^3.1.14"
   }
 }

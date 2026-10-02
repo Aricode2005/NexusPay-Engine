@@ -2,7 +2,15 @@ import rateLimit from 'express-rate-limit';
 import { RedisStore } from 'rate-limit-redis';
 
 import redisClient from '../config/redis.js';
+
+// Bypass rate limiting during load tests
+const noopLimiter = (req, res, next) => next();
+
 const createLimiter = (prefix, maxRequests) => {
+    if (process.env.RATE_LIMIT_DISABLED === 'true') {
+        console.log(`[RATE LIMITER] Disabled for prefix: ${prefix}`);
+        return noopLimiter;
+    }
     return rateLimit({
         windowMs: 15 * 60 * 1000, 
         max: maxRequests,

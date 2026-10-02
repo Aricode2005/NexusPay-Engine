@@ -3,12 +3,51 @@ import { publishTransferEvent } from '../services/kafkaPublisher.js';
 import crypto from 'crypto';
 import bcrypt from 'bcryptjs';
 
+/**
+ * Synchronous notification handler — does the same work as the Kafka consumer
+ * but inline, so the user waits for it. Used when NOTIFY_MODE=sync for benchmarking.
+ */
+const sendNotificationSync = async (client, eventPayload) => {
+    const { sender, receiver, amount, txId } = eventPayload;
+
+    const senderRes = await client.query('SELECT id FROM users WHERE email = $1', [sender.email]);
+    const receiverRes = await client.query('SELECT id FROM users WHERE email = $1', [receiver.email]);
+
+    if (senderRes.rows.length > 0) {
+        await client.query(
+            `INSERT INTO notifications (user_id, type, title, message) VALUES ($1, $2, $3, $4)`,
+            [senderRes.rows[0].id, 'DEBIT', 'Money Sent', `You successfully sent ₹${amount} to ${receiver.handle}. TxID: ${txId}`]
+        );
+    }
+    if (receiverRes.rows.length > 0) {
+        await client.query(
+            `INSERT INTO notifications (user_id, type, title, message) VALUES ($1, $2, $3, $4)`,
+            [receiverRes.rows[0].id, 'CREDIT', 'Money Received', `You received ₹${amount} from ${sender.handle}. TxID: ${txId}`]
+        );
+    }
+};
+
 export const createTransferIntent = async (req, res) => {
     try {
-        const { transferMethod, userHandle, receiverHandle, bankName, accountNumber, amount, remarks } = req.body;
+        const { transferMethod, userHandle, receiverHandle, bankName, accountNumber, amount, remarks, idempotencyKey } = req.body;
         const senderId = req.user.id;
 
         if (!amount || amount <= 0) return res.status(400).json({ error: 'Valid amount is required.' });
+
+        // --- Idempotency check ---
+        if (idempotencyKey) {
+            const existing = await pool.query(
+                `SELECT * FROM transactions WHERE idempotency_key = $1`, [idempotencyKey]
+            );
+            if (existing.rows.length > 0) {
+                return res.status(200).json({
+                    message: 'Duplicate request — original transaction returned.',
+                    order_id: existing.rows[0].order_id,
+                    transaction: existing.rows[0],
+                    deduplicated: true
+                });
+            }
+        }
 
         const senderRes = await pool.query(
             `SELECT id, user_id, user_handle, account_number, bank_name, balance 
@@ -49,13 +88,14 @@ export const createTransferIntent = async (req, res) => {
         const intentRecord = await pool.query(
             `INSERT INTO transactions 
             (order_id, status, sender_id, sender_handle, sender_bank_name, sender_account_no, 
-             receiver_id, receiver_handle, receiver_bank_name, receiver_account_no, amount) 
-             VALUES ($1, 'PENDING', $2, $3, $4, $5, $6, $7, $8, $9, $10) RETURNING *`,
+             receiver_id, receiver_handle, receiver_bank_name, receiver_account_no, amount${idempotencyKey ? ', idempotency_key' : ''}) 
+             VALUES ($1, 'PENDING', $2, $3, $4, $5, $6, $7, $8, $9, $10${idempotencyKey ? ', $11' : ''}) RETURNING *`,
             [
                 orderId, 
                 senderAccount.user_id, senderAccount.user_handle, senderAccount.bank_name, senderAccount.account_number,
                 receiverAccount.user_id, receiverAccount.user_handle, receiverAccount.bank_name, receiverAccount.account_number,
-                amount
+                amount,
+                ...(idempotencyKey ? [idempotencyKey] : [])
             ]
         );
 
@@ -66,6 +106,18 @@ export const createTransferIntent = async (req, res) => {
         });
 
     } catch (error) {
+        // Idempotency unique constraint violation — return the existing record
+        if (error.code === '23505' && error.constraint === 'transactions_idempotency_key_key') {
+            const existing = await pool.query(
+                `SELECT * FROM transactions WHERE idempotency_key = $1`, [req.body.idempotencyKey]
+            );
+            return res.status(200).json({
+                message: 'Duplicate request — original transaction returned.',
+                order_id: existing.rows[0]?.order_id,
+                transaction: existing.rows[0],
+                deduplicated: true
+            });
+        }
         console.error('Intent Error:', error.message);
         res.status(500).json({ error: 'Failed to create transfer intent.' });
     }
@@ -129,11 +181,15 @@ export const executeTransfer = async (req, res) => {
 
         const [firstLockId, secondLockId] = [sAccId, rAccId].sort();
         
+        // Acquire row-level locks in deterministic order (prevents deadlocks)
         await client.query('SELECT balance FROM bank_accounts WHERE id = $1 FOR UPDATE', [firstLockId]);
         await client.query('SELECT balance FROM bank_accounts WHERE id = $1 FOR UPDATE', [secondLockId]);
 
-        // 4. CHECK BALANCE
-        if (parseFloat(senderAccRes.rows[0].balance) < parseFloat(transaction.amount)) {
+        // 4. CHECK BALANCE — must re-read AFTER acquiring lock to prevent double-spend
+        const lockedBalanceRes = await client.query('SELECT balance FROM bank_accounts WHERE id = $1', [sAccId]);
+        const currentBalance = parseFloat(lockedBalanceRes.rows[0].balance);
+        
+        if (currentBalance < parseFloat(transaction.amount)) {
             await client.query("UPDATE transactions SET status = 'FAILED' WHERE id = $1", [transaction.id]);
             await client.query('COMMIT'); 
             return res.status(400).json({ error: 'Insufficient funds.' });
@@ -156,7 +212,14 @@ export const executeTransfer = async (req, res) => {
             timestamp: new Date().toISOString()
         };
 
-        await publishTransferEvent(kafkaPayload);
+        // --- NOTIFY_MODE flag: sync vs kafka (default) ---
+        if (process.env.NOTIFY_MODE === 'sync') {
+            // Synchronous: write notifications inside the request (user waits)
+            await sendNotificationSync(client, kafkaPayload);
+        } else {
+            // Async (default): publish to Kafka, consumer handles it in background
+            await publishTransferEvent(kafkaPayload);
+        }
 
         res.status(200).json({
             message: 'Transfer successful via MPIN authorization.',
