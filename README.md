@@ -2,7 +2,7 @@
 
 A high-performance, event-driven backend for a FinTech wallet application. This API handles secure money transfers using a two-step Intent/Execute architecture, pessimistic database locking to prevent double-spending, and Apache Kafka for asynchronous event notifications.
 
-## 🤖 AI Features (New!)
+## 🤖 AI Features
 
 We've recently integrated advanced Agentic AI and RAG architectures to provide intelligent financial features directly within the backend.
 
@@ -41,6 +41,24 @@ A highly optimized Retrieval-Augmented Generation (RAG) pipeline allowing users 
 * **Distributed Rate Limiting:** Utilized **Redis** to prevent brute-force login attacks and API abuse.
 * **Automated Reconciliation:** Built a Node-Cron sweeper job to automatically expire abandoned transaction intents and keep the database state clean.
 
+---
+
+## 🧪 Concurrency & Load Testing (New!)
+
+This engine is rigorously tested to handle high-concurrency financial transactions safely. 
+
+### 1. Concurrency Safety (Jest)
+To prove the system is immune to race conditions, I wrote an integration test suite using Jest and `Promise.all()` to bombard the server with simultaneous requests against a live PostgreSQL database.
+*   **Double-Spend Prevention:** Fired 50 concurrent ₹10 transfers against a single account with a ₹100 balance. The system utilized `SELECT ... FOR UPDATE` row-level locks to ensure exactly 10 transfers succeeded, the remaining 40 were rejected, and the balance never dropped below ₹0.
+*   **Deadlock Prevention:** Fired 200 simultaneous bidirectional transfers (A→B and B→A). Using deterministic lock ordering (`[senderId, receiverId].sort()`), the engine processed all 200 requests in under 2 seconds with zero deadlocks. Total network money was perfectly conserved.
+*   **Idempotency:** Fired 20 identical transfer requests at the exact same millisecond. The system deduplicated them using application-level checks and DB unique constraints, processing exactly 1 transfer.
+
+### 2. Performance & Latency Benchmarks (k6)
+I benchmarked the API using **k6** to simulate 100 Virtual Users (VUs) continuously executing transfers.
+*   By decoupling the notification system and offloading it to **Kafka** (event-driven architecture), the `p(95)` API latency dropped from **962ms** to **480ms** (a 50% improvement under heavy load).
+
+---
+
 ## 💻 Tech Stack
 * **Backend:** Node.js, Express.js
 * **AI & LLMs:** LangChain, LangGraph, HuggingFace Inference, Qwen 2.5 7B
@@ -48,6 +66,7 @@ A highly optimized Retrieval-Augmented Generation (RAG) pipeline allowing users 
 * **Message Broker:** Apache Kafka / KafkaJS
 * **Caching & Rate Limiting:** Redis
 * **Security:** JWT Authentication, bcrypt, Helmet.js
+* **Testing:** Jest, k6
 
 ---
 ## 📊 Database Schema (ER Diagram)
@@ -119,6 +138,7 @@ erDiagram
         numeric amount
         varchar status
         timestamp timestamp
+        varchar idempotency_key UK
     }
 ```
 
